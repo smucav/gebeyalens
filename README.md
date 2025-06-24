@@ -187,4 +187,80 @@ Clean and normalize raw Telegram posts, then annotate a representative sample in
 
 ---
 
-Next up: **Fine-tuning Amharic NER models** to recognize structured product data in the wild 
+# 🛠 Task 3: Fine-Tune NER Model
+
+## 🎯 Objective
+Fine-tune a transformer-based Named Entity Recognition (NER) model to extract key entities (**Product**, **Price**, **Location**, **Contact**, **Delivery**) from Amharic Telegram messages, enabling structured data extraction for EthioMart’s e-commerce platform.
+
+---
+
+## 🚀 Approach
+
+### 🧠 Model Selection
+- **Model**: `xlm-roberta-base`, chosen for its multilingual capabilities and strong performance on low-resource languages like Amharic.
+- **Framework**: Hugging Face Transformers, using the `Trainer` API for efficient fine-tuning.
+
+### 📊 Data Preparation
+- **Input**: Labeled dataset from Task 2: `data/labeled/labeled.conll` (~50 messages with annotated entities).
+- **Preprocessing**:
+  - Loaded CoNLL data into dictionaries with `tokens`, `ner_tags`, `message_id`, `channel`, `text`.
+  - Split into 80% training and 20% validation using `train_test_split`.
+  - Tokenized with XLM-RoBERTa tokenizer, aligning subword tokens and labels (e.g., `B-Product`, `I-Price`, `O`).
+  - Assigned `-100` to special tokens to ignore in loss computation.
+  - Converted to Hugging Face `Dataset` format.
+
+### ⚙️ Fine-Tuning
+- **Environment**: Google Colab (T4 GPU).
+- **Libraries**: `transformers`, `datasets`, `seqeval`, `torch`.
+- **Hyperparameters**:
+  - Batch size: `4` (CPU), `8` (GPU)
+  - Epochs: `3`
+  - Learning rate: `2e-5`
+  - Warmup steps: `10`
+  - Weight decay: `0.01`
+  - Max sequence length: `128`
+  - Gradient accumulation: `2` (effective batch size: 8)
+  - Max steps: `30` (small dataset)
+- **Training**:
+  - Used `DataCollatorForTokenClassification` for padding.
+  - Evaluated per epoch using `seqeval` metrics.
+  - Saved best model to `models/ner_xlmr`.
+
+---
+
+## 📏 Evaluation
+- **Validation set**: ~10 samples
+- **Metrics** (from `reports/ner_metrics.json`):
+  - **F1-Score**: `0.629`
+  - **Precision**: `0.855`
+  - **Recall**: `0.497`
+
+### 🔍 Analysis
+- High **precision** means predictions are accurate when made.
+- Low **recall** suggests missed entities—more data is needed.
+- F1-score is a fair tradeoff for small data size.
+
+- **Model Size**: ~1100 MB
+- **Evaluation Time**: ~3.39s for ~10 samples (~0.34s/sample)
+
+---
+
+## ⚠️ Challenges & Solutions
+
+| Challenge                    | Resolution                                                             |
+|-----------------------------|------------------------------------------------------------------------|
+| Small Dataset (~50 msgs)    | Trained lightly (3 epochs, max 30 steps) to avoid overfitting          |
+| Low Recall                  | Noted limitation; more labeled data could help                         |
+| GPU Memory Constraints       | Reduced batch size, used gradient accumulation                         |
+| Amharic Tokenization         | XLM-RoBERTa tokenizer handled it well; no major issues                 |
+
+---
+
+## 📂 Key Files
+
+- `scripts/fine_tune_ner.py`: Core fine-tuning logic (`NERFineTuner` class)
+- `scripts/run_fine_tune.py`: CLI runner (configurable model name, epochs, batch size)
+- `models/ner_xlmr/`: Fine-tuned model and tokenizer
+- `reports/ner_metrics.json`: Evaluation metrics
+- `fine_tune_ner.log`: Logs (training, evaluation)
+
