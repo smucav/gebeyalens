@@ -1,11 +1,13 @@
 """
-Fine-tune XLM-RoBERTa for NER on labeled.conll.
+Fine-tune NER models for Amharic e-commerce data.
 """
 import os
 import json
+import time
 import logging
 from typing import List, Dict
 import torch
+import numpy as np
 from transformers import (
     AutoTokenizer,
     AutoModelForTokenClassification,
@@ -15,7 +17,7 @@ from transformers import (
 )
 from datasets import Dataset
 from sklearn.model_selection import train_test_split
-from seqeval.metrics import precision_score, recall_score, f1_score
+from seqeval.metrics import precision_score, recall_score, f1_score, classification_report
 from scripts.config import LABELED_DATA_DIR, MODELS_DIR, REPORTS_DIR
 
 # Configure logging
@@ -34,17 +36,17 @@ class NERFineTuner:
         self,
         model_name: str = "xlm-roberta-base",
         conll_path: str = os.path.join(LABELED_DATA_DIR, "labeled.conll"),
-        output_dir: str = os.path.join(MODELS_DIR, "ner_xlmr"),
+        output_dir: str = os.path.join(MODELS_DIR, "ner_model"),
         report_path: str = os.path.join(REPORTS_DIR, "ner_metrics.json"),
         max_length: int = 128,
-        batch_size: int = 4,  # Reduced for CPU
+        batch_size: int = 8,  # Optimized for Colab GPU
         epochs: int = 3
     ):
         """
         Initialize NER fine-tuner.
 
         Args:
-            model_name: Pretrained model name (e.g., xlm-roberta-base)
+            model_name: Pretrained model name (e.g., xlm-roberta-base, distilbert-base-multilingual-cased)
             conll_path: Path to labeled.conll
             output_dir: Directory to save model
             report_path: Path to save metrics
@@ -70,6 +72,8 @@ class NERFineTuner:
         ]
         self.label2id = {label: i for i, label in enumerate(self.label_list)}
         self.id2label = {i: label for i, label in enumerate(self.label_list)}
+        self.model = None
+        self.trainer = None
 
     def load_conll(self) -> List[Dict]:
         """
@@ -104,7 +108,7 @@ class NERFineTuner:
 
     def align_tokens_labels(self, example: Dict) -> Dict:
         """
-        Align tokens with subword tokenization and convert tags to IDs for a single example.
+        Align tokens with subword tokenization and convert tags to IDs.
 
         Args:
             example: Dict with tokens and ner_tags
@@ -118,9 +122,8 @@ class NERFineTuner:
             truncation=True,
             max_length=self.max_length,
             padding="max_length",
-            return_tensors=None  # Return Python lists
+            return_tensors=None
         )
-
         word_ids = tokenized_inputs.word_ids()
         label_ids = []
         prev_word_idx = None
@@ -132,7 +135,6 @@ class NERFineTuner:
             else:
                 label_ids.append(self.label2id[example["ner_tags"][word_idx]])
             prev_word_idx = word_idx
-
         return {
             "input_ids": tokenized_inputs["input_ids"],
             "attention_mask": tokenized_inputs["attention_mask"],
@@ -155,7 +157,6 @@ class NERFineTuner:
         )
         train_dataset = Dataset.from_list(train_data)
         val_dataset = Dataset.from_list(val_data)
-
         tokenized_train = train_dataset.map(
             self.align_tokens_labels,
             batched=False,
@@ -166,27 +167,22 @@ class NERFineTuner:
             batched=False,
             remove_columns=["tokens", "ner_tags", "metadata"]
         )
-
-        logger.info(f"Train dataset sample: {tokenized_train[0]}")
-        logger.info(f"Validation dataset sample: {tokenized_val[0]}")
         logger.info(f"Prepared {len(train_dataset)} train and {len(val_dataset)} validation examples")
         return {"train": tokenized_train, "val": tokenized_val}
 
-
     def compute_metrics(self, eval_pred) -> Dict:
         """
-        Compute precision, recall, F1 using seqeval.
+        Compute precision, recall, F1, and per-entity metrics.
 
         Args:
-        eval_pred: Tuple of predictions and labels
+            eval_pred: Tuple of predictions and labels
 
         Returns:
-        Dict with metrics
+            Dict with metrics
         """
         predictions, labels = eval_pred
         predictions = torch.argmax(torch.tensor(predictions), dim=-1).numpy()
         true_labels = labels
-
         pred_tags = []
         true_tags = []
         for pred, true in zip(predictions, true_labels):
@@ -198,38 +194,75 @@ class NERFineTuner:
                     true_seq.append(self.id2label[t])
             pred_tags.append(pred_seq)
             true_tags.append(true_seq)
-
+        report = classification_report(true_tags, pred_tags, output_dict=True)
         metrics = {
-            "precision": precision_score(true_tags, pred_tags),
-            "recall": recall_score(true_tags, pred_tags),
-            "f1": f1_score(true_tags, pred_tags)
+            "precision": report["weighted avg"]["precision"],
+            "recall": report["weighted avg"]["recall"],
+            "f1": report["weighted avg"]["f1-score"],
+            "per_entity": {
+                entity: {
+                    "precision": report.get(entity, {}).get("precision", 0),
+                    "recall": report.get(entity, {}).get("recall", 0),
+                    "f1": report.get(entity, {}).get("f1-score", 0)
+                } for entity in self.label_list if entity in report
+            }
         }
-        logger.info(f"Evaluation metrics: {metrics}")
+        logger.info(f"Evaluation metrics for {self.model_name}: {metrics}")
         return metrics
 
+    def measure_inference_time(self, test_texts: List[str], num_samples: int = 10) -> float:
+        """
+        Measure average inference time.
+
+        Args:
+            test_texts: List of text messages to test
+            num_samples: Number of samples to average over
+
+        Returns:
+            Average inference time per sample (seconds)
+        """
+        if self.model is None:
+            self.model = AutoModelForTokenClassification.from_pretrained(self.output_dir)
+        self.model.eval()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
+        total_time = 0
+        for text in test_texts[:num_samples]:
+            inputs = self.tokenizer(
+                text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+                padding="max_length"
+            )
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            start_time = time.time()
+            with torch.no_grad():
+                _ = self.model(**inputs)
+            total_time += time.time() - start_time
+        avg_time = total_time / min(num_samples, len(test_texts))
+        logger.info(f"Average inference time for {self.model_name}: {avg_time:.4f} seconds")
+        return avg_time
 
     def run(self):
         """
         Run fine-tuning process.
         """
-        logger.info("Starting NER fine-tuning")
+        logger.info(f"Starting NER fine-tuning for {self.model_name}")
         data = self.load_conll()
         datasets = self.prepare_dataset(data)
-
-        model = AutoModelForTokenClassification.from_pretrained(
+        self.model = AutoModelForTokenClassification.from_pretrained(
             self.model_name,
             num_labels=len(self.label_list),
             id2label=self.id2label,
             label2id=self.label2id
         )
-
         training_args = TrainingArguments(
             output_dir=self.output_dir,
             num_train_epochs=self.epochs,
             per_device_train_batch_size=self.batch_size,
             per_device_eval_batch_size=self.batch_size,
-            gradient_accumulation_steps=2,  # Simulate batch size 8
-            warmup_steps=10,  # Reduced for small dataset
+            warmup_steps=10,
             weight_decay=0.01,
             logging_dir=os.path.join(self.output_dir, "logs"),
             logging_steps=5,
@@ -238,18 +271,15 @@ class NERFineTuner:
             load_best_model_at_end=True,
             metric_for_best_model="f1",
             greater_is_better=True,
-            save_total_limit=2,
-            max_steps=30  # 40 examples / effective batch_size 8 (4*2) ≈ 5 steps/epoch * 3 epochs
+            save_total_limit=2
         )
-
         data_collator = DataCollatorForTokenClassification(
             tokenizer=self.tokenizer,
             padding="max_length",
             max_length=self.max_length
         )
-
-        trainer = Trainer(
-            model=model,
+        self.trainer = Trainer(
+            model=self.model,
             args=training_args,
             train_dataset=datasets["train"],
             eval_dataset=datasets["val"],
@@ -257,13 +287,13 @@ class NERFineTuner:
             tokenizer=self.tokenizer,
             compute_metrics=self.compute_metrics
         )
-
-        trainer.train()
-        trainer.save_model(self.output_dir)
+        self.trainer.train()
+        self.trainer.save_model(self.output_dir)
         self.tokenizer.save_pretrained(self.output_dir)
         logger.info(f"Saved model to {self.output_dir}")
-
-        metrics = trainer.evaluate()
+        metrics = self.trainer.evaluate()
+        test_texts = [d["metadata"].get("text", "") for d in data if "text" in d["metadata"]]
+        metrics["inference_time"] = self.measure_inference_time(test_texts)
         with open(self.report_path, "w", encoding="utf-8") as f:
             json.dump(metrics, f, ensure_ascii=False, indent=2)
         logger.info(f"Saved metrics to {self.report_path}")
