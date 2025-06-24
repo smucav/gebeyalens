@@ -37,3 +37,5 @@ TELEGRAM_API_HASH = os.getenv("APP_HASH")
 RAW_DATA_DIR = "data/raw"
 PROCESSED_DATA_DIR = "data/processed"
 LABELED_DATA_DIR = "data/labeled"
+MODELS_DIR = "models"
+REPORTS_DIR = "reports"
