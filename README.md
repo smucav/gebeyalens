@@ -428,7 +428,6 @@ The results are saved as a self-contained HTML visualization report.
 ```
 reports/shap_plot.html
 ```
-<<<<<<< task-6
 ## 📊 Task 6: FinTech Vendor Scorecard for Micro-Lending
 
 ### 📝 Overview
@@ -488,5 +487,3 @@ A **weighted Lending Score** is then computed to rank vendors based on performan
    ```
 
 ---
-=======
->>>>>>> main
