@@ -428,3 +428,65 @@ The results are saved as a self-contained HTML visualization report.
 ```
 reports/shap_plot.html
 ```
+<<<<<<< task-6
+## 📊 Task 6: FinTech Vendor Scorecard for Micro-Lending
+
+### 📝 Overview
+
+**Task 6** develops a **Vendor Analytics Engine** to evaluate EthioMart vendors for potential micro-lending, based on Telegram activity.  
+It processes scraped posts enriched with NER entities (from XLM-RoBERTa) to compute key vendor performance metrics:
+
+- 📈 Posting frequency (posts/week)
+- 👀 Average views per post
+- 🌟 Top-performing post (product + price)
+- 💰 Average price point (in ETB)
+
+A **weighted Lending Score** is then computed to rank vendors based on performance.
+
+📁 Final results are saved as:  
+`reports/vendor_scorecard.csv`
+
+---
+
+### 📜 Scripts
+
+| File                                  | Description                                                                 |
+|---------------------------------------|-----------------------------------------------------------------------------|
+| `scripts/vendor_analytics.py`         | Implements `VendorAnalytics` class for computing metrics and scores        |
+| `run_vendor_analytics.py`             | CLI wrapper to run analytics with configurable paths                       |
+| `scripts/generate_ner_predictions.py` | Generates NER predictions and saves enriched post data (Task 5 prerequisite) |
+
+---
+
+### 📂 Outputs
+
+- `reports/vendor_scorecard.csv` — Final vendor scorecard with metrics and Lending Scores
+- `data/labeled/scraped_data_with_ner.json` — Enriched post data with NER entities (if generated)
+- `vendor_analytics.log` — Log file recording analytics progress
+
+---
+
+### 🚀 Usage
+
+1. ✅ **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. 🧠 **Generate NER Predictions** (if not already created)
+   ```bash
+   python scripts/generate_ner_predictions.py \
+       --input_path data/processed/scraped_data.json \
+       --output_path data/labeled/scraped_data_with_ner.json
+   ```
+
+3. 📊 **Run Vendor Analytics**
+   ```bash
+   python run_vendor_analytics.py \
+       --input_path data/labeled/scraped_data_with_ner.json \
+       --output_path reports/vendor_scorecard.csv
+   ```
+
+---
+=======
+>>>>>>> main
