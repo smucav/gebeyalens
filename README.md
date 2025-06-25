@@ -187,7 +187,7 @@ Clean and normalize raw Telegram posts, then annotate a representative sample in
 
 ---
 
-# 🛠 Task 3: Fine-Tune NER Model
+## 🛠 Task 3: Fine-Tune NER Model
 
 ## 🎯 Objective
 Fine-tune a transformer-based Named Entity Recognition (NER) model to extract key entities (**Product**, **Price**, **Location**, **Contact**, **Delivery**) from Amharic Telegram messages, enabling structured data extraction for EthioMart’s e-commerce platform.
@@ -264,7 +264,7 @@ Fine-tune a transformer-based Named Entity Recognition (NER) model to extract ke
 - `reports/ner_metrics.json`: Evaluation metrics
 - `fine_tune_ner.log`: Logs (training, evaluation)
 
-# 📊 Task 4: Model Comparison – Amharic E-commerce NER
+## 📊 Task 4: Model Comparison – Amharic E-commerce NER
 
 This task evaluates three Named Entity Recognition (NER) models—**XLM-RoBERTa**, **DistilBERT**, and **mBERT**—on their ability to extract key entities from Amharic Telegram e-commerce messages (e.g., product, price, location).
 
@@ -366,3 +366,65 @@ To fine-tune **DistilBERT** or **mBERT**:
 While DistilBERT offers speed and compactness, **XLM-RoBERTa** is recommended for EthioMart where **accuracy is critical** in understanding nuanced Amharic business language.
 
 ---
+
+## 🧠 Task 5: Model Interpretability
+
+### 📝 Overview
+
+**Task 5** leverages SHAP to interpret **XLM-RoBERTa’s** Named Entity Recognition (NER) predictions on Amharic e-commerce posts.  
+The goal is to visualize how individual tokens (e.g., ጫማ, 2000, ብር) contribute to predicted entities such as:
+
+- 🛍️ `Product`
+- 💰 `Price`
+- 📍 `Location`
+
+This interpretability layer enhances transparency and trust in the model's decisions.  
+The results are saved as a self-contained HTML visualization report.
+
+---
+
+### 📜 Scripts
+
+| File                          | Description                                                     |
+|-------------------------------|-----------------------------------------------------------------|
+| `scripts/interpret_model.py`  | Implements the `NERInterpreter` class using SHAP for NER.      |
+
+---
+
+### 📂 Outputs
+
+- `reports/shap_plot.html` — Interactive SHAP visualization of token contributions  
+- `interpret_model.log` — Log file with NER output and SHAP progress/debug info
+
+---
+
+### 🚀 Usage
+
+1. ✅ **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. ▶️ **Run the script**:
+   ```bash
+   python scripts/interpret_model.py
+   ```
+
+---
+
+### 🔍 Notes
+
+- 🧱 **Uses Object-Oriented Design** via the `NERInterpreter` class
+
+- ⚠️ **Limitations**:
+  - SHAP is adapted for classification-style visualization; true token-level attributions may be approximate
+  - Results may vary due to the **small dataset**; more labeled data is recommended for deeper insights
+
+---
+
+### ✅ Example SHAP Output
+
+📁 Open the HTML report:
+```
+reports/shap_plot.html
+```
